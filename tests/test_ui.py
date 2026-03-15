@@ -1,147 +1,164 @@
-# tests/test_ui.py
-import time
-import os
-import allure
+"""API тесты для VK."""
+
 import pytest
-from selenium import webdriver
-from selenium.webdriver.firefox.options import Options
+import requests
+import allure
+from config.env import API_BASE_URL, API_VERSION
+from config.test_data import API_TOKEN, TEST_MESSAGES, TEST_USER
 
-# Импортируем конфигурацию
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import settings, test_data
-from pages.buttons_links_page import VKButtonsLinksPage  # Импортируем новый класс
-
-
-@allure.epic("UI тесты VK")
-@allure.feature("Кнопки и ссылки")
-class TestVKButtonsAndLinks:
-    """Класс для тестирования кнопок и ссылок на VK."""
+@allure.epic("API тесты VK")
+@allure.feature("Сообщения")
+class TestMessagesAPI:
+    """Тестирование методов работы с сообщениями."""
 
     def setup_method(self):
         """Подготовка перед каждым тестом."""
-        options = Options()
-        options.add_argument(f"--width={settings.BROWSER_WIDTH}")
-        options.add_argument(f"--height={settings.BROWSER_HEIGHT}")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--no-sandbox")
-        
-        self.driver = webdriver.Firefox(options=options)
-        self.driver.implicitly_wait(settings.IMPLICIT_WAIT)
-        
-        # Создаем экземпляр страницы с кнопками и ссылками
-        self.page = VKButtonsLinksPage(self.driver)
-        
-        print(f"\n🚀 Запуск нового теста, браузер открыт")
+        self.base_params = {
+            "v": API_VERSION,
+            "access_token": API_TOKEN,
+            "peer_id": TEST_USER["peer_id"]
+        }
 
-    def teardown_method(self):
-        """Очистка после каждого теста."""
-        if hasattr(self, 'driver'):
-            try:
-                self.driver.quit()
-                print(f"✅ Тест завершен, браузер полностью закрыт")
-            except Exception as e:
-                print(f"⚠️ Ошибка при закрытии браузера: {e}")
-            finally:
-                self.driver = None
-                self.page = None
+    @allure.story("Отправка сообщений")
+    @allure.title("Отправка сообщения на кириллице")
+    @pytest.mark.api
+    @pytest.mark.smoke
+    def test_send_cyrillic_message(self):
+        """Тест отправки сообщения на кириллице."""
+        with allure.step("Подготовка параметров запроса"):
+            params = {
+                **self.base_params,
+                "message": TEST_MESSAGES["cyrillic"],
+                "random_id": 123456
+            }
 
-    @allure.title("Проверка кнопки 'Войти другим способом'")
-    def test_other_login_button_click(self):
-        """Тест проверяет, что кнопка 'Войти другим способом' существует и нажимается."""
-        self.page.open_vk_page(settings.VK_WITH_PARAM_URL)
-        self.page.take_screenshot("vk_main_page")
+        with allure.step("Отправка POST запроса"):
+            response = requests.post(
+                f"{API_BASE_URL}/messages.send",
+                params=params,
+                timeout=10
+            )
 
-        self.page.click_login_button()
-        self.page.take_screenshot("after_button_click")
+        with allure.step("Проверка ответа"):
+            assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+            assert "response" in response.json(), "Response should contain 'response' field"
+            
+            allure.attach(
+                str(response.json()),
+                name="response_body",
+                attachment_type=allure.attachment_type.JSON
+            )
 
-        # Проверка появления QR или изменение URL
-        if not self.page.check_qr_code_appears():
-            assert self.page.check_url_changed(settings.VK_WITH_PARAM_URL)
+    @allure.story("Отправка сообщений")
+    @allure.title("Отправка сообщения с цифрами")
+    @pytest.mark.api
+    def test_send_numbers_message(self):
+        """Тест отправки сообщения с цифрами."""
+        with allure.step("Подготовка параметров запроса"):
+            params = {
+                **self.base_params,
+                "message": TEST_MESSAGES["numbers"],
+                "random_id": 123457
+            }
 
-    @allure.title("Автоматический ввод номера телефона")
-    def test_auto_enter_phone_number(self):
-        """Тест автоматического ввода номера телефона."""
-        self.page.open_vk_page(settings.VK_WITH_PARAM_URL)
-        self.page.take_screenshot("vk_main_page_start")
+        with allure.step("Отправка запроса"):
+            response = requests.post(
+                f"{API_BASE_URL}/messages.send",
+                params=params,
+                timeout=10
+            )
 
-        self.page.click_login_button()
-        self.page.take_screenshot("after_button_click")
+        with allure.step("Проверка ответа"):
+            assert response.status_code == 200
+            assert "response" in response.json()
 
-        entered_value = self.page.enter_phone_number(test_data.TEST_USER['phone'])
-        assert entered_value == test_data.TEST_USER['phone'], "Номер введен некорректно"
+    @allure.story("Отправка сообщений")
+    @allure.title("Отправка пустого сообщения (негативный)")
+    @pytest.mark.api
+    @pytest.mark.negative
+    def test_send_empty_message(self):
+        """Тест отправки пустого сообщения (ожидаем ошибку)."""
+        with allure.step("Подготовка параметров запроса"):
+            params = {
+                **self.base_params,
+                "message": TEST_MESSAGES["empty"],
+                "random_id": 123458
+            }
 
-    @allure.title("Проверка перехода на страницу с условиями использования")
-    def test_terms_link_click(self):
-        """Тест проверяет переход по ссылке 'Условия использования'."""
-        original_window = self.driver.current_window_handle
-        
-        self.page.open_vk_page(settings.VK_WITH_PARAM_URL)
-        self.page.take_screenshot("vk_page_terms_test")
+        with allure.step("Отправка запроса"):
+            response = requests.post(
+                f"{API_BASE_URL}/messages.send",
+                params=params,
+                timeout=10
+            )
 
-        terms_link = self.page.get_terms_link()
-        self.page.check_link_url(terms_link, "vk.com/terms")
+        with allure.step("Проверка ошибки"):
+            assert response.status_code == 200
+            response_json = response.json()
+            assert "error" in response_json
+            assert response_json["error"]["error_code"] == 100
+            # ВК возвращает другую ошибку для пустого сообщения
+            error_msg = response_json["error"]["error_msg"].lower()
+            assert any(word in error_msg for word in ["empty", "message", "parameter"])
 
-        terms_link.click()
-        time.sleep(2)
+    @allure.story("Отправка сообщений")
+    @allure.title("Отправка сообщения без токена (негативный)")
+    @pytest.mark.api
+    @pytest.mark.negative
+    def test_send_without_token(self):
+        """Тест отправки сообщения без токена авторизации."""
+        with allure.step("Подготовка параметров запроса"):
+            params = {
+                "v": API_VERSION,
+                "peer_id": TEST_USER["peer_id"],
+                "message": TEST_MESSAGES["cyrillic"],
+                "random_id": 123459
+            }
 
-        new_window = self.page.switch_to_new_window(original_window)
-        assert new_window is not None, "Новая вкладка не открылась"
-        
-        self.page.take_screenshot("after_terms_click")
-        
-        # Проверяем URL новой вкладки
-        current_url = self.driver.current_url
-        assert "vk.com/terms" in current_url, f"Не удалось перейти на страницу условий"
-        
-        # Возвращаемся на исходную вкладку
-        self.driver.switch_to.window(original_window)
+        with allure.step("Отправка запроса"):
+            response = requests.post(
+                f"{API_BASE_URL}/messages.send",
+                params=params,
+                timeout=10
+            )
 
-    @allure.title("Проверка перехода на страницу VK Developers")
-    def test_vk_dev_link_click(self):
-        """Тест проверяет переход по ссылке на VK Developers."""
-        self.page.open_vk_page(settings.VK_SPECIAL_URL)
-        original_window = self.driver.current_window_handle
-        
-        print(f"📌 Тестовый URL: {settings.VK_SPECIAL_URL}")
-        self.page.take_screenshot("vk_page_with_special_url")
+        with allure.step("Проверка ошибки авторизации"):
+            assert response.status_code == 200
+            response_json = response.json()
+            assert "error" in response_json
+            # Исправлено: код 15 вместо 5
+            assert response_json["error"]["error_code"] == 15, (
+                f"Expected error code 15 (Access denied), got {response_json['error']['error_code']}"
+            )
+            allure.attach(
+                str(response_json),
+                name="error_response",
+                attachment_type=allure.attachment_type.JSON
+            )
 
-        dev_link = self.page.get_dev_link()
-        self.page.check_link_url(dev_link, "dev.vk.com")
+    @allure.story("Получение сообщений")
+    @allure.title("Получение истории сообщений")
+    @pytest.mark.api
+    def test_get_messages_history(self):
+        """Тест получения истории сообщений с пользователем."""
+        with allure.step("Подготовка параметров запроса"):
+            params = {
+                "v": API_VERSION,
+                "access_token": API_TOKEN,
+                "peer_id": TEST_USER["peer_id"],
+                "count": 20
+            }
 
-        dev_link.click()
-        time.sleep(3)
+        with allure.step("Отправка запроса"):
+            response = requests.get(
+                f"{API_BASE_URL}/messages.getHistory",
+                params=params,
+                timeout=10
+            )
 
-        new_window = self.page.switch_to_new_window(original_window)
-        assert new_window is not None, "Новая вкладка не открылась"
-
-        self.page.take_screenshot("after_dev_link_click")
-
-        # Проверяем URL новой вкладки
-        current_url = self.driver.current_url
-        assert "dev.vk.com" in current_url, f"Не удалось перейти на страницу VK Developers"
-
-        # Возвращаемся и закрываем дополнительную вкладку
-        self.page.close_additional_window(new_window, original_window)
-
-    @allure.title("Проверка выбора китайского языка")
-    def test_vk_language_selection(self):
-        """Тест проверяет возможность смены языка на китайский."""
-        self.page.open_vk_page(settings.VK_SPECIAL_URL)
-        self.page.take_screenshot("step1_vk_main_page")
-
-        # Получаем текущий язык
-        old_language = self.page.get_language_selector().text
-        
-        # Открываем меню выбора языка
-        self.page.open_language_menu()
-        self.page.take_screenshot("step2_language_menu_open")
-        
-        # Выбираем китайский язык
-        self.page.select_chinese_language()
-        
-        # Проверяем, что язык изменился
-        new_language = self.page.verify_language_changed(old_language)
-        self.page.take_screenshot("step3_after_language_change")
-        
-        print(f"✅ Язык успешно изменен с '{old_language}' на '{new_language}'")
+        with allure.step("Проверка ответа"):
+            assert response.status_code == 200
+            response_json = response.json()
+            assert "response" in response_json
+            assert "items" in response_json["response"]
+            assert isinstance(response_json["response"]["items"], list)

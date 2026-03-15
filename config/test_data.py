@@ -8,7 +8,7 @@ TEST_USER = {
 
     "phone": "+7 123 456 78 90",  # Теперь с пробелами, как форматирует VK
     "phone_raw": "+71234567890",
-    "peer_id": 777201192,      # ВАЖНО: число, а не строка!
+    "peer_id": 209793519,      # ВАЖНО: число, а не строка!
     "name": "Test User"
 }
 
@@ -23,7 +23,7 @@ API_TOKEN = "vk1.a.F10Fr3VaFOU6Caxp3bpixvIR0lu9ua5Xn8ilGOoX4U5SCuAMqhIcdnCksQh5T
 
 # Тестовые сообщения
 TEST_MESSAGES = {
-    "cyrillic": "Привет, мир!",
+    "cyrillic": "Повар спрашивает у повара: Какова твоя профессия?",
     "latin": "Hello, World!",
     "numbers": "25000$",
     "empty": "",
