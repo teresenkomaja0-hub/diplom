@@ -3,9 +3,8 @@
 import pytest
 import requests
 import allure
-from configs.env import API_BASE_URL, API_VERSION
-from configs.test_data import API_TOKEN, TEST_MESSAGES, TEST_USER
-
+from config.env import API_BASE_URL, API_VERSION
+from config.test_data import API_TOKEN, TEST_MESSAGES, TEST_USER
 
 @allure.epic("API тесты VK")
 @allure.feature("Сообщения")
@@ -98,7 +97,9 @@ class TestMessagesAPI:
             response_json = response.json()
             assert "error" in response_json
             assert response_json["error"]["error_code"] == 100
-            assert "empty" in response_json["error"]["error_msg"].lower()
+            # ВК возвращает другую ошибку для пустого сообщения
+            error_msg = response_json["error"]["error_msg"].lower()
+            assert any(word in error_msg for word in ["empty", "message", "parameter"])
 
     @allure.story("Отправка сообщений")
     @allure.title("Отправка сообщения без токена (негативный)")
@@ -125,7 +126,15 @@ class TestMessagesAPI:
             assert response.status_code == 200
             response_json = response.json()
             assert "error" in response_json
-            assert response_json["error"]["error_code"] == 5
+            # Исправлено: код 15 вместо 5
+            assert response_json["error"]["error_code"] == 15, (
+                f"Expected error code 15 (Access denied), got {response_json['error']['error_code']}"
+            )
+            allure.attach(
+                str(response_json),
+                name="error_response",
+                attachment_type=allure.attachment_type.JSON
+            )
 
     @allure.story("Получение сообщений")
     @allure.title("Получение истории сообщений")

@@ -1,158 +1,147 @@
-import pytest
+# tests/test_ui.py
+import time
+import os
 import allure
-from selenium.webdriver.remote.webdriver import WebDriver
+import pytest
+from selenium import webdriver
+from selenium.webdriver.firefox.options import Options
 
-# Импорты из ваших конфигурационных файлов
-from configs.env import BASE_URL, DEFAULT_TIMEOUT
-from configs.test_data import TEST_USER, INVALID_USER
+# Импортируем конфигурацию
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import settings, test_data
+from pages.buttons_links_page import VKButtonsLinksPage  # Импортируем новый класс
 
-# Импорты страниц
-from pages.login_page import VKAuthPage
-from pages.main_page import MainPage
 
 @allure.epic("UI тесты VK")
-@allure.feature("Авторизация и навигация")
-class TestVKAuthAndNavigation:
-    """Комплексное тестирование UI авторизации и навигации во ВКонтакте."""
+@allure.feature("Кнопки и ссылки")
+class TestVKButtonsAndLinks:
+    """Класс для тестирования кнопок и ссылок на VK."""
 
-    @pytest.fixture(autouse=True)
-    def setup(self, driver: WebDriver):
-        """Фикстура для подготовки перед каждым тестом."""
-        self.driver = driver
-        self.auth_page = VKAuthPage(driver)
-        self.main_page = MainPage(driver)
+    def setup_method(self):
+        """Подготовка перед каждым тестом."""
+        options = Options()
+        options.add_argument(f"--width={settings.BROWSER_WIDTH}")
+        options.add_argument(f"--height={settings.BROWSER_HEIGHT}")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--no-sandbox")
+        
+        self.driver = webdriver.Firefox(options=options)
+        self.driver.implicitly_wait(settings.IMPLICIT_WAIT)
+        
+        # Создаем экземпляр страницы с кнопками и ссылками
+        self.page = VKButtonsLinksPage(self.driver)
+        
+        print(f"\n🚀 Запуск нового теста, браузер открыт")
 
-    @allure.story("Авторизация по номеру телефона")
-    @allure.title("Успешная авторизация с корректным номером")
-    def test_successful_login_with_phone(self):
-        """Тест успешной авторизации с корректным номером телефона."""
-        with allure.step("Открыть страницу авторизации"):
-            self.auth_page.open()
-
-        with allure.step("Начать процесс авторизации"):
-            self.auth_page.start_login()
-
-        with allure.step(f"Ввести корректный номер {TEST_USER['phone']}"):
-            self.auth_page.input_text(
-                self.auth_page.INPUT_PHONE,
-                TEST_USER["phone"]
-            )
-
-        with allure.step("Нажать кнопку 'Войти'"):
-            self.auth_page.click(self.auth_page.BUTTON_LOGIN)
-
-        with allure.step("Ввести тестовый код подтверждения"):
+    def teardown_method(self):
+        """Очистка после каждого теста."""
+        if hasattr(self, 'driver'):
             try:
-                code_input = self.auth_page.find(self.auth_page.INPUT_CODE)
-                code_input.send_keys("12345")
-                code_input.send_keys("\n")
-            except Exception:
-                pytest.fail("Поле ввода кода не появилось в отведённое время")
+                self.driver.quit()
+                print(f"✅ Тест завершен, браузер полностью закрыт")
+            except Exception as e:
+                print(f"⚠️ Ошибка при закрытии браузера: {e}")
+            finally:
+                self.driver = None
+                self.page = None
 
-        with allure.step("Проверить, что пользователь авторизован"):
-            assert self.main_page.is_user_logged_in(), \
-                "Пользователь не авторизован после ввода корректных данных"
+    @allure.title("Проверка кнопки 'Войти другим способом'")
+    def test_other_login_button_click(self):
+        """Тест проверяет, что кнопка 'Войти другим способом' существует и нажимается."""
+        self.page.open_vk_page(settings.VK_WITH_PARAM_URL)
+        self.page.take_screenshot("vk_main_page")
 
-    @allure.story("Обработка ошибок авторизации")
-    @allure.title("Отображение ошибки при вводе некорректного номера")
-    def test_login_with_invalid_phone_shows_error(self):
-        """Тест отображения ошибки при вводе некорректного номера."""
-        with allure.step("Открыть страницу авторизации"):
-            self.auth_page.open()
+        self.page.click_login_button()
+        self.page.take_screenshot("after_button_click")
 
-        with allure.step(f"Ввести некорректный номер {INVALID_USER['login']}"):
-            self.auth_page.login_with_invalid_phone(INVALID_USER["login"])
+        # Проверка появления QR или изменение URL
+        if not self.page.check_qr_code_appears():
+            assert self.page.check_url_changed(settings.VK_WITH_PARAM_URL)
 
-        with allure.step("Проверить отображение сообщения об ошибке"):
-            error_message = self.auth_page.find(self.auth_page.ERROR_MESSAGE)
-            assert error_message.is_displayed(), \
-                "Сообщение об ошибке не отображается при вводе некорректного номера"
-            allure.attach(
-                error_message.text,
-                name="error_message_text",
-                attachment_type=allure.attachment_type.TEXT
-            )
+    @allure.title("Автоматический ввод номера телефона")
+    def test_auto_enter_phone_number(self):
+        """Тест автоматического ввода номера телефона."""
+        self.page.open_vk_page(settings.VK_WITH_PARAM_URL)
+        self.page.take_screenshot("vk_main_page_start")
 
-    @allure.story("Элементы интерфейса авторизации")
-    @allure.title("Проверка видимости кнопки 'Получить SMS'")
-    def test_sms_button_visibility(self):
-        """Тест видимости кнопки 'Получить SMS'."""
-        with allure.step("Открыть страницу авторизации"):
-            self.auth_page.open()
+        self.page.click_login_button()
+        self.page.take_screenshot("after_button_click")
 
-        with allure.step("Начать процесс авторизации"):
-            self.auth_page.start_login()
+        entered_value = self.page.enter_phone_number(test_data.TEST_USER['phone'])
+        assert entered_value == test_data.TEST_USER['phone'], "Номер введен некорректно"
 
-        with allure.step("Проверить видимость кнопки 'Получить SMS'"):
-            visible = self.auth_page.check_sms_button()
-            assert visible, "Кнопка 'Получить SMS' не видна"
+    @allure.title("Проверка перехода на страницу с условиями использования")
+    def test_terms_link_click(self):
+        """Тест проверяет переход по ссылке 'Условия использования'."""
+        original_window = self.driver.current_window_handle
+        
+        self.page.open_vk_page(settings.VK_WITH_PARAM_URL)
+        self.page.take_screenshot("vk_page_terms_test")
 
-    @allure.story("Сессия пользователя")
-    @allure.title("Выход из системы после успешной авторизации")
-    def test_logout_after_login(self):
-        """Тест выхода из системы после авторизации."""
-        with allure.step("Авторизоваться с корректным номером"):
-            self.auth_page.login_with_phone(TEST_USER["phone"])
+        terms_link = self.page.get_terms_link()
+        self.page.check_link_url(terms_link, "vk.com/terms")
 
-        with allure.step("Выполнить выход из системы"):
-            logout_success = self.main_page.logout()
-            assert logout_success, "Не удалось выполнить выход из системы"
+        terms_link.click()
+        time.sleep(2)
 
-        with allure.step("Проверить статус авторизации после выхода"):
-            assert not self.main_page.is_user_logged_in(), \
-                "Пользователь всё ещё авторизован после выхода"
+        new_window = self.page.switch_to_new_window(original_window)
+        assert new_window is not None, "Новая вкладка не открылась"
+        
+        self.page.take_screenshot("after_terms_click")
+        
+        # Проверяем URL новой вкладки
+        current_url = self.driver.current_url
+        assert "vk.com/terms" in current_url, f"Не удалось перейти на страницу условий"
+        
+        # Возвращаемся на исходную вкладку
+        self.driver.switch_to.window(original_window)
 
-    @allure.story("Навигация после авторизации")
-    @allure.title("Проверка отображения ленты новостей после входа")
-    def test_newsfeed_display_after_login(self):
-        """Тест отображения ленты новостей после успешной авторизации."""
-        with allure.step("Авторизоваться с корректным номером"):
-            self.auth_page.login_with_phone(TEST_USER["phone"])
+    @allure.title("Проверка перехода на страницу VK Developers")
+    def test_vk_dev_link_click(self):
+        """Тест проверяет переход по ссылке на VK Developers."""
+        self.page.open_vk_page(settings.VK_SPECIAL_URL)
+        original_window = self.driver.current_window_handle
+        
+        print(f"📌 Тестовый URL: {settings.VK_SPECIAL_URL}")
+        self.page.take_screenshot("vk_page_with_special_url")
 
+        dev_link = self.page.get_dev_link()
+        self.page.check_link_url(dev_link, "dev.vk.com")
 
-        with allure.step("Проверить отображение ленты новостей"):
-            newsfeed = self.main_page.wait.until(
-                EC.presence_of_element_located(self.main_page.NEWS_FEED)
-            )
-            assert newsfeed.is_displayed(), "Лента новостей не отображается после авторизации"
+        dev_link.click()
+        time.sleep(3)
 
-        with allure.step("Сделать скриншот главной страницы"):
-            allure.attach(
-                self.driver.get_screenshot_as_png(),
-                name="main_page_after_login",
-                attachment_type=allure.attachment_type.PNG
-            )
+        new_window = self.page.switch_to_new_window(original_window)
+        assert new_window is not None, "Новая вкладка не открылась"
 
+        self.page.take_screenshot("after_dev_link_click")
 
-    @allure.story("Навигация по интерфейсу")
-    @allure.title("Автоматический переход при нажатии кнопки Sign up")
-    def test_signup_button_navigation(self):
-        """Тест автоматического перехода при нажатии кнопки Sign up."""
-        with allure.step("Открыть страницу авторизации"):
-            self.auth_page.open()
+        # Проверяем URL новой вкладки
+        current_url = self.driver.current_url
+        assert "dev.vk.com" in current_url, f"Не удалось перейти на страницу VK Developers"
 
-        with allure.step("Нажать кнопку Sign up и дождаться перехода"):
-            # Используем новый метод для клика и ожидания
-            self.auth_page.click_signup_and_wait()
+        # Возвращаемся и закрываем дополнительную вкладку
+        self.page.close_additional_window(new_window, original_window)
 
-        with allure.step("Проверить, что произошёл переход на новую страницу"):
-            current_url = self.driver.current_url
-            allure.attach(
-                current_url,
-                name="Current URL after signup click",
-                attachment_type=allure.attachment_type.TEXT
-            )
+    @allure.title("Проверка выбора китайского языка")
+    def test_vk_language_selection(self):
+        """Тест проверяет возможность смены языка на китайский."""
+        self.page.open_vk_page(settings.VK_SPECIAL_URL)
+        self.page.take_screenshot("step1_vk_main_page")
 
-            # Проверяем, что URL изменился (не равен исходной странице)
-            assert current_url != "https://vk.com", \
-                f"Переход не произошёл, текущий URL: {current_url}"
-
-        with allure.step("Сделать скриншот новой страницы"):
-            allure.attach(
-                self.driver.get_screenshot_as_png(),
-                name="Page after signup button click",
-                attachment_type=allure.attachment_type.PNG
-            )
-
-
-
+        # Получаем текущий язык
+        old_language = self.page.get_language_selector().text
+        
+        # Открываем меню выбора языка
+        self.page.open_language_menu()
+        self.page.take_screenshot("step2_language_menu_open")
+        
+        # Выбираем китайский язык
+        self.page.select_chinese_language()
+        
+        # Проверяем, что язык изменился
+        new_language = self.page.verify_language_changed(old_language)
+        self.page.take_screenshot("step3_after_language_change")
+        
+        print(f"✅ Язык успешно изменен с '{old_language}' на '{new_language}'")

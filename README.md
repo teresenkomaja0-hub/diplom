@@ -7,7 +7,7 @@
 - `configs/` - конфигурационные файлы
   - `env.py` - настройки окружения
   - `test_data.py` - тестовые данные
-- `pages/` - PageObject классы для UI тестов
+- `pages/` - buttons_links_page классы для UI тестов
 - `tests/` - директория с тестами
   - `test_ui.py` - UI тесты
   - `test_api.py` - API тесты
