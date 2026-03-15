@@ -1,1 +1,0 @@
-{'error': {'error_code': 15, 'error_msg': 'Access denied: token required', 'request_params': [{'key': 'v', 'value': '5.199'}, {'key': 'peer_id', 'value': '209793519'}, {'key': 'message', 'value': '*******'}, {'key': 'random_id', 'value': '123459'}, {'key': 'method', 'value': 'messages.send'}, {'key': 'oauth', 'value': '1'}]}}
