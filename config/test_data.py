@@ -23,9 +23,9 @@ API_TOKEN = "vk1.a.F10Fr3VaFOU6Caxp3bpixvIR0lu9ua5Xn8ilGOoX4U5SCuAMqhIcdnCksQh5T
 
 # Тестовые сообщения
 TEST_MESSAGES = {
-    "cyrillic": "Повар спрашивает у повара: Какова твоя профессия?",
+    "cyrillic": "QA спрашивает у QA: какова твоя профессия?",
     "latin": "Hello, World!",
-    "numbers": "25000$",
+    "numbers": "9999999999999999999",
     "empty": "",
     "long": "A" * 1000
 }
